@@ -1,0 +1,89 @@
+=
+=================================================================================
+MoolAI Orchestrator Docker Component Test Results (curl)
+=================================================================================
+
+Timestamp: Tue Sep  9 13:06:00 PDT 2025
+Environment: Docker (curl)
+
+----------------------------------------
+SYSTEM HEALTH
+----------------------------------------
+Test: Health Check Endpoint
+Status: PASSED
+Details: HTTP 200 - <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Moolai - AI Language Model Platform</title>
+    <meta name="description" content="Moolai - Connect with powerful AI language models through our intuitive chat interface. Set up your preferred LLM and start chatting." />
+    <meta name="author" content="Moolai" />
+
+    <meta property="og:title" content="Moolai - AI Language Model Platform" />
+    <meta property="og:description" content="Connect with powerful AI language models through our intuitive chat interface" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/moolai-og.png" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@moolai" />
+    <meta name="twitter:image" content="/moolai-og.png" />
+    <script type="module" crossorigin src="/assets/index-CO-cjUp-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CibDmKgh.css">
+  </head>
+
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
+
+Test: System Metrics Endpoint
+Status: FAILED
+Details: HTTP 404
+
+----------------------------------------
+CACHE SERVICE
+----------------------------------------
+Test: Cache Stats API
+Status: INFO
+Details: Cache disabled
+
+Test: Cache Clear Session API
+Status: FAILED
+Details: HTTP 405
+
+----------------------------------------
+FIREWALL SERVICE
+----------------------------------------
+Test: PII Detection Scan
+Status: FAILED
+Details: HTTP 405
+
+Test: Secrets Detection Scan
+Status: FAILED
+Details: HTTP 405
+
+Test: PII Anonymization API
+Status: FAILED
+Details: HTTP 405
+
+----------------------------------------
+LLM/PROMPT RESPONSE SERVICE
+----------------------------------------
+Test: LLM Prompt Endpoint
+Status: PASSED
+Details: Endpoint working
+
+Test: Domain Classification
+Status: INFO
+Details: Classification may need API key
+
+========================================
+TEST SUMMARY
+========================================
+Total Tests: 9
+Passed: 2
+Failed: 5
+Success Rate: 22.22%
+

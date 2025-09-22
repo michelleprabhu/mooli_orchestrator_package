@@ -1,0 +1,41 @@
+{
+  "timestamp": "2025-09-09T20:06:00Z",
+  "environment": "Docker (curl)",
+  "components": {
+    "system_health": {
+      "service": "System Health (Docker curl)",
+      "tests": [
+        {"name": "Health Check", "status": "PASSED", "http_code": 200},
+        {"name": "System Metrics", "status": "FAILED", "http_code": 404}
+      ]
+    },
+    "cache": {
+      "service": "Cache Service (Docker curl)",
+      "tests": [
+        {"name": "Cache Stats", "status": "INFO", "cache_enabled": false},
+        {"name": "Cache Clear Session", "status": "FAILED", "http_code": 405}
+      ]
+    },
+    "firewall": {
+      "service": "Firewall Service (Docker curl)",
+      "tests": [
+        {"name": "PII Detection", "status": "FAILED", "http_code": 405},
+        {"name": "Secrets Detection", "status": "FAILED", "http_code": 405},
+        {"name": "PII Anonymization", "status": "FAILED", "http_code": 405}
+      ]
+    },
+    "llm_service": {
+      "service": "LLM/Prompt Response Service (Docker curl)",
+      "tests": [
+        {"name": "LLM Prompt", "status": "PASSED", "has_response": true},
+        {"name": "Domain Classification", "status": "INFO", "note": "May need API key"}
+      ]
+    }
+  },
+  "summary": {
+    "total_tests": 9,
+    "passed": 2,
+    "failed": 5,
+    "success_rate": 22.22%
+  }
+}

@@ -21,7 +21,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Controller Backend
+  # Controller Backend (C-OCS + C-GUI integrated)
   controller:
     build:
       context: .
@@ -46,7 +46,6 @@ services:
       - moolai-network
     restart: unless-stopped
     volumes:
-      - ./controller/app/.env:/app/controller/app/.env
       - ./controller/app/db/controller_config.json:/app/controller/app/db/controller_config.json
 
   # Frontend with Nginx
@@ -57,24 +56,6 @@ services:
     container_name: moolai-frontend
     ports:
       - "80:80"
-    depends_on:
-      - controller
-    networks:
-      - moolai-network
-    restart: unless-stopped
-
-  # Orchestrator (Optional - for testing)
-  orchestrator:
-    build:
-      context: .
-      dockerfile: Dockerfile.orchestrator
-    container_name: moolai-orchestrator
-    environment:
-      - CONTROLLER_HOST=controller
-      - CONTROLLER_PORT=8765
-      - CONTROLLER_WS_PATH=/ws
-      - ORCHESTRATOR_ID=orch-001
-      - WEBSOCKET_KEEPALIVE_INTERVAL=10
     depends_on:
       - controller
     networks:

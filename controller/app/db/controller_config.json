@@ -1,0 +1,128 @@
+{
+  "organizations": {
+    "orch-001": {
+      "name": "Default Orchestrator",
+      "location": "localhost",
+      "metadata": {
+        "version": "1.0.0",
+        "hostname": "MacBookPro.lan",
+        "ip": "192.168.1.99",
+        "ssl_enabled": false,
+        "name": "Default Orchestrator",
+        "location": "localhost",
+        "features": {
+          "cache": {
+            "enabled": false
+          }
+        }
+      },
+      "last_seen": "2025-08-28T04:04:38.933133",
+      "status": "active",
+      "o_config_snapshot": {
+        "received_at": "2025-08-20T16:12:11.439924+00:00",
+        "data": {
+          "features": {
+            "cache": {
+              "enabled": true
+            }
+          },
+          "last_seen": "2025-08-20T16:10:37.080261+00:00",
+          "metadata": {
+            "capabilities": [],
+            "created": "2025-01-01T00:00:00Z",
+            "features": {},
+            "hostname": "MacBookPro.lan",
+            "ip": "192.168.1.99",
+            "last_updated": "2025-08-20T16:12:10.951233+00:00",
+            "location": "localhost",
+            "name": "Dev Orchestrator",
+            "ssl_enabled": false,
+            "version": "1.0.0"
+          },
+          "orchestrator_id": "orch-001",
+          "organization": {
+            "location": "localhost",
+            "name": "Dev Orchestrator"
+          },
+          "service_type": "orchestrator",
+          "status": "active"
+        }
+      },
+      "features": {
+        "cache": {
+          "enabled": false
+        }
+      }
+    },
+    "org-demo-001": {
+      "name": "Demo Inc",
+      "location": "us-west",
+      "metadata": {
+        "tier": "dev"
+      },
+      "features": {
+        "chat": true
+      },
+      "last_seen": null,
+      "status": "inactive"
+    },
+    "org-001": {
+      "name": "Dev",
+      "location": "localhost",
+      "metadata": {
+        "internal_url": "http://127.0.0.1:9000"
+      },
+      "features": {},
+      "last_seen": "2025-08-20T23:53:24.355717+00:00",
+      "status": "active"
+    },
+    "org-test-001": {
+      "name": "test-orch",
+      "location": "auto",
+      "metadata": {},
+      "features": {},
+      "last_seen": "2025-08-22T00:09:57.022499",
+      "status": "active"
+    },
+    "org-dual-001": {
+      "name": "Dual Org",
+      "location": "us-west",
+      "metadata": {
+        "tier": "dev"
+      },
+      "features": {
+        "cache": {
+          "enabled": false
+        },
+        "guard": {
+          "enabled": true
+        }
+      },
+      "last_seen": null,
+      "status": "inactive"
+    },
+    "org-michelle": {
+      "name": "Michelle Orchestrator",
+      "location": "auto",
+      "metadata": {},
+      "features": {},
+      "last_seen": "2025-08-28T16:20:15.917908",
+      "status": "active"
+    },
+    "org-12345": {
+      "name": "TEST-org",
+      "location": "unknown",
+      "metadata": {},
+      "features": {
+        "cache": {
+          "enabled": true
+        },
+        "firewall": {
+          "enabled": true
+        }
+      },
+      "last_seen": null,
+      "status": "inactive"
+    }
+  }
+}

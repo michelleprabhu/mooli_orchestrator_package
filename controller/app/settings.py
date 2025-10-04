@@ -1,0 +1,3 @@
+WS_HOST = "0.0.0.0"
+WS_PORT = 8765
+CONTROLLER_ID = "controller-001"

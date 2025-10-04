@@ -147,8 +147,12 @@ def get_provisioning_status(config_manager) -> Dict[str, Any]:
         logger.error(f"[SESSION-PROVISIONING] failed to get status: {e}")
         return {"error": str(e)}
 
+# Alias for backward compatibility with controller_dispatch
+apply_provisioning = apply_session_provisioning
+
 __all__ = [
-    "apply_session_provisioning", 
+    "apply_session_provisioning",
+    "apply_provisioning",  # alias
     "apply_runtime_feature_toggle",
     "update_session_limits",
     "get_provisioning_status"

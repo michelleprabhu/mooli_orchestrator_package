@@ -1,0 +1,32 @@
+{
+  "features": {
+    "real_time_communication": true,
+    "session_management": true,
+    "websocket_enabled": true
+  },
+  "last_seen": null,
+  "metadata": {
+    "capabilities": [
+      "session_management",
+      "real_time_chat",
+      "websocket"
+    ],
+    "created": "2025-10-04T01:28:22.427194+00:00",
+    "last_updated": "2025-10-04T01:28:22.427211+00:00",
+    "ssl_enabled": false,
+    "version": "1.0.0"
+  },
+  "orchestrator_id": "orch-001",
+  "organization": {
+    "location": "localhost",
+    "name": "Default Orchestrator"
+  },
+  "service_type": "orchestrator",
+  "session": {
+    "cleanup_interval": 300,
+    "max_concurrent_sessions": 1000,
+    "timeout_seconds": 1800
+  },
+  "status": "inactive",
+  "independence_mode": true
+}

@@ -133,14 +133,20 @@ if not any(isinstance(h, _BufferHandler) for h in logging.getLogger().handlers):
 # ---------- Health ----------
 @router.get("/health")
 async def internal_health():
-    base = _ws_base()
+    # Check if there are any active WebSocket connections
+    from ...main import get_active_orchestrators
     ws = {"status": "down"}
     try:
-        async with httpx.AsyncClient(timeout=2.0) as client:
-            r = await client.get(f"{base}/ocx/orchestrators")
-            ws["status"] = "ok" if r.status_code == 200 else f"http_{r.status_code}"
+        active_orchs = get_active_orchestrators()
+        if active_orchs:
+            ws["status"] = "ok"
+            ws["active_connections"] = len(active_orchs)
+        else:
+            ws["status"] = "down"
+            ws["active_connections"] = 0
     except Exception as e:
         ws["error"] = str(e)
+        ws["status"] = "down"
     return _ok("Internal API healthy", service="controller-internal-api", ws=ws)
 
 # ---------- Config-backed list (not live) ----------

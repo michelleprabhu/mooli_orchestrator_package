@@ -21,8 +21,13 @@ class DatabaseManager:
 		"""Get the database URL from environment."""
 		database_url = os.getenv("DATABASE_URL")
 		if not database_url:
-			# Default database URL for controller
-			database_url = "postgresql+asyncpg://localhost/moolai_controller"
+			# Build from individual environment variables
+			host = os.getenv("DATABASE_HOST", "localhost")
+			port = os.getenv("DATABASE_PORT", "5432")
+			user = os.getenv("DATABASE_USER", "moolai")
+			password = os.getenv("DATABASE_PASSWORD", "moolai_password")
+			database = os.getenv("DATABASE_NAME", "moolai_controller")
+			database_url = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{database}"
 		return database_url
 	
 	def get_sync_database_url(self) -> str:

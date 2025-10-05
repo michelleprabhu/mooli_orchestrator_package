@@ -126,6 +126,11 @@ export default function Dashboard() {
 
         if (!mounted) return;
 
+        console.log("Dashboard data loaded:", { 
+          overview: ov.data.data, 
+          total_cost: ov.data.data?.total_cost 
+        });
+
         setOverview(ov.data.data);
         setCosts(cs.data.data);
         setCostHistory(cs.data.data?.history ?? []);

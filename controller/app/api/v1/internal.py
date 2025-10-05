@@ -134,11 +134,11 @@ if not any(isinstance(h, _BufferHandler) for h in logging.getLogger().handlers):
 @router.get("/health")
 async def internal_health():
     # Check if there are any active WebSocket connections
-    from ...main import get_active_orchestrators
-    ws = {"status": "down"}
+    ws = {"status": "down", "active_connections": 0}
     try:
-        active_orchs = get_active_orchestrators()
-        if active_orchs:
+        from ...utils.controller_state import list_orchestrators
+        active_orchs = list_orchestrators(public=True)
+        if active_orchs and len(active_orchs) > 0:
             ws["status"] = "ok"
             ws["active_connections"] = len(active_orchs)
         else:

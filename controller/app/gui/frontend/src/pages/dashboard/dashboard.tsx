@@ -116,12 +116,13 @@ export default function Dashboard() {
 
     const load = async () => {
       try {
+        // Load APIs individually to prevent one failure from blocking others
         const [ov, cs, orchs, og, hl] = await Promise.all([
-          api.get<OverviewResp>("/api/v1/controller/overview"),
-          api.get<CostsResp>("/api/v1/controller/costs", { params: { include_forecast: true, granularity: "day" } }),
-          api.get<OrchestratorsResp>("/api/v1/controller/orchestrators", { params: { page_size: 100 } }),
-          api.get<OrgsResp>("/api/v1/controller/organizations", { params: { page_size: 5 } }),
-          api.get<HealthResp>("/api/v1/controller/health"),
+          api.get<OverviewResp>("/api/v1/controller/overview").catch(e => ({ data: { success: false, data: undefined } })),
+          api.get<CostsResp>("/api/v1/controller/costs", { params: { include_forecast: true, granularity: "day" } }).catch(e => ({ data: { success: false, data: undefined } })),
+          api.get<OrchestratorsResp>("/api/v1/controller/orchestrators", { params: { page_size: 100 } }).catch(e => ({ data: { success: false, data: { items: [] } } })),
+          api.get<OrgsResp>("/api/v1/controller/organizations", { params: { page_size: 5 } }).catch(e => ({ data: { success: false, data: { items: [] } } })),
+          api.get<HealthResp>("/api/v1/controller/health").catch(e => ({ data: {} })),
         ]);
 
         if (!mounted) return;

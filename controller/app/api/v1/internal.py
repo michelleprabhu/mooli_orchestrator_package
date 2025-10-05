@@ -24,21 +24,17 @@ import json
 async def write_independence_to_env(orchestrator_id: str, is_independent: bool):
     """Write independence setting to environment files."""
     try:
-        # Write to controller .env file
-        controller_env_path = "/Users/michelleprabhu/Desktop/mooli_orchestrator_package/controller/app/.env"
+        # Write to controller .env file (in Docker container)
+        controller_env_path = "/app/controller/app/.env"
         await update_env_file(controller_env_path, f"ORCHESTRATOR_{orchestrator_id.upper()}_INDEPENDENT", str(is_independent).lower())
         
-        # Write to root .env file
-        root_env_path = "/Users/michelleprabhu/Desktop/mooli_orchestrator_package/.env"
-        await update_env_file(root_env_path, f"ORCHESTRATOR_{orchestrator_id.upper()}_INDEPENDENT", str(is_independent).lower())
-        
-        # Write to orchestrator config JSON
-        config_path = f"/Users/michelleprabhu/Desktop/mooli_orchestrator_package/orchestrator/app/data/orchestrator_config.json"
-        await update_config_json(config_path, "independence_mode", is_independent)
+        # Write to orchestrator config JSON (in Docker container)  
+        config_path = f"/app/controller/app/db/orchestrator_independence.json"
+        await update_config_json(config_path, orchestrator_id, {"is_independent": is_independent})
         
         logging.info(f"Independence setting written to environment files for {orchestrator_id}: {is_independent}")
     except Exception as e:
-        logging.error(f"Failed to write independence to environment files: {e}")
+        logging.debug(f"Failed to write independence to environment files (non-critical): {e}")
 
 async def update_env_file(file_path: str, key: str, value: str):
     """Update or add a key-value pair in an .env file."""

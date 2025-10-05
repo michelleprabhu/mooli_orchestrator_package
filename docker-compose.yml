@@ -35,6 +35,7 @@ services:
       - CONTROLLER_PORT=8765
       - DEV_BEARER_TOKEN=fake-dev-token
       - HEARTBEAT_TTL_SEC=120
+      - HEARTBEAT_POKER_ENABLED=false
     ports:
       - "8765:8765"
     depends_on:

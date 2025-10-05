@@ -485,6 +485,7 @@ async def websocket_handler(websocket: WebSocket):
                 # Update presence on keepalives
                 if mtype == "i_am_alive":
                     # Check if orchestrator is marked as independent
+                    is_independent = False
                     try:
                         from sqlalchemy import text
                         async with db_manager.get_session() as db:
@@ -497,11 +498,16 @@ async def websocket_handler(websocket: WebSocket):
                             row = result.fetchone()
                             
                             if row and row[0]:  # is_independent = True
+                                is_independent = True
                                 logger.info("[C-OCS] Ignoring heartbeat from independent orchestrator %s", orch_id)
                                 # Just ignore the heartbeat - don't update anything
                                 continue
                     except Exception as e:
                         logger.debug("[C-OCS] Independence check failed: %s", e)
+                    
+                    # If we get here, the orchestrator is NOT independent - process the heartbeat
+                    if not is_independent:
+                        logger.info("[C-OCS] Processing heartbeat from orchestrator %s", orch_id)
                     
                     mark_keepalive(orch_id)
                     live_internal = list_orchestrators(public=False)

@@ -1,8 +1,8 @@
 // src/lib/api.ts
 import axios from "axios";
 
-const baseURL =
-  import.meta.env.VITE_CONTROLLER_BASE_URL ?? "http://localhost:8765";
+// Use empty baseURL for production (proxied by Nginx), or env var for dev
+const baseURL = import.meta.env.VITE_CONTROLLER_BASE_URL ?? "";
 
 export const api = axios.create({ baseURL, timeout: 10000 });
 

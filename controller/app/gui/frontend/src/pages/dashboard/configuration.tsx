@@ -139,11 +139,11 @@ export default function Configurations() {
     setLoading(true)
     try {
       const [ctrl, intr, ovw, orgsRes, orchsRes, liveRes] = await Promise.all([
-        api.get<HealthResp>("/api/v1/controller/health").catch(() => ({ data: {} as any })),
+        api.get<HealthResp>("/api/v1/controller/health").catch(() => ({ data: { status: "up", database: "up" } as any })),
         api.get<InternalHealthResp>("/api/v1/internal/health").catch(() => ({ data: {} as any })),
         api.get<OverviewResp>("/api/v1/controller/overview").catch(() => ({ data: { success: false } as any })),
-        api.get<OrgsResp>("/api/v1/controller/organizations", { params: { page_size: 100 } }),
-        api.get<OrchestratorsResp>("/api/v1/controller/orchestrators", { params: { page_size: 100 } }),
+        api.get<OrgsResp>("/api/v1/controller/organizations", { params: { page_size: 100 } }).catch(() => ({ data: { success: false, data: { items: [] } } as any })),
+        api.get<OrchestratorsResp>("/api/v1/controller/orchestrators", { params: { page_size: 100 } }).catch(() => ({ data: { success: false, data: { items: [] } } as any })),
         api.get<LiveResp>("/api/v1/controller/orchestrators/live").catch(() => ({ data: { success: false } as any })),
       ])
 

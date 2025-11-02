@@ -1,65 +1,34 @@
-"""Orchestrator Instance model for controller service - aligned with orchestrator approach."""
+"""Unified Organization model for controller service - simplified schema."""
 
-from sqlalchemy import Column, String, Boolean, DateTime, Text, Integer, JSON
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy import ForeignKey
+from sqlalchemy import Column, String, Boolean, DateTime, Integer
+from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime
-import uuid
 from ..db.database import Base
 
 
 class Organization(Base):
-	"""Organization table - represents organizations managed by the controller."""
+	"""Unified organization table - represents organizations and their orchestrator instances."""
 	__tablename__ = "organizations"
 	
-	organization_id = Column(String(255), primary_key=True)
-	name = Column(String(255), nullable=False)
-	location = Column(String(100), default="unknown")
-	is_active = Column(Boolean, default=True)
-	is_independent = Column(Boolean, default=False)  # Independence mode
-	settings = Column(JSON, default={})
-	created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-	updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+	# Primary identifiers
+	org_id = Column(String(255), primary_key=True)
+	org_name = Column(String(255), nullable=False)
 	
-	def __repr__(self):
-		return f"<Organization(organization_id={self.organization_id}, name='{self.name}', is_active={self.is_active})>"
-
-
-class OrchestratorInstance(Base):
-	"""Orchestrator instance table - each instance represents one organization."""
-	__tablename__ = "orchestrator_instances"
+	# Orchestrator connection info
+	orchestrator_id = Column(String(255), unique=True)
 	
-	# Primary identification (matches orchestrator's ORGANIZATION_ID)
-	orchestrator_id = Column(String(255), primary_key=True)  # Format: "org_001"
-	organization_name = Column(String(255), nullable=False, index=True)  # e.g., "Acme Corp"
-	location = Column(String(100), default="unknown")  # e.g., "us-east-1", "on-prem"
-	
-	# Status and health (aligned with orchestrator's status tracking)
-	status = Column(String(50), default="inactive")  # active, inactive, error, starting
+	# Status tracking
+	status = Column(String(50), default="inactive")  # active, inactive, error
 	last_seen = Column(DateTime)
-	health_status = Column(String(50), default="unknown")  # healthy, degraded, unhealthy
+	connected_at = Column(DateTime)
 	
-	# Features (matching orchestrator's config structure)
-	features = Column(JSON, default={})  # {"cache": {"enabled": true}, "firewall": {"enabled": false}}
-	session_config = Column(JSON, default={})  # {"timeout_seconds": 1800, "max_concurrent_sessions": 1000}
+	# Keepalive tracking
+	keepalive_enabled = Column(Boolean, default=True)  # Does this org send keepalives?
 	
-	# Independence and privacy settings (new controller-only features)
-	is_independent = Column(Boolean, default=False)  # Orchestrator runs independently
-	privacy_mode = Column(Boolean, default=False)  # Orchestrator hides details from controller
-	
-	# Connection information
-	internal_url = Column(String(500))  # e.g., "http://orchestrator-org-001:8000"
-	database_url = Column(String(500))  # Orchestrator's database connection
-	redis_url = Column(String(500))  # Orchestrator's Redis connection
-	
-	# System information
-	container_id = Column(String(255))
-	image_name = Column(String(255))
-	environment_variables = Column(JSON, default={})
-	
-	# Monitoring and observability
-	phoenix_endpoint = Column(String(500))  # Phoenix monitoring endpoint
-	monitoring_enabled = Column(Boolean, default=True)
+	# Metadata
+	location = Column(String(255))
+	ip_address = Column(String(50))
+	features = Column(JSONB, default={})
 	
 	# Contact information (optional)
 	admin_email = Column(String(255))
@@ -69,7 +38,78 @@ class OrchestratorInstance(Base):
 	# Timestamps
 	created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 	updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-	last_activity = Column(DateTime)
 	
 	def __repr__(self):
-		return f"<OrchestratorInstance(orchestrator_id={self.orchestrator_id}, name='{self.organization_name}', status={self.status})>"
+		return f"<Organization(org_id={self.org_id}, name='{self.org_name}', status={self.status})>"
+	
+	def to_dict(self):
+		"""Convert to dictionary for API responses."""
+		return {
+			"org_id": self.org_id,
+			"org_name": self.org_name,
+			"orchestrator_id": self.orchestrator_id,
+			"status": self.status,
+			"last_seen": self.last_seen.isoformat() if self.last_seen else None,
+			"connected_at": self.connected_at.isoformat() if self.connected_at else None,
+			"keepalive_enabled": self.keepalive_enabled,
+			"location": self.location,
+			"ip_address": self.ip_address,
+			"features": self.features,
+			"admin_email": self.admin_email,
+			"support_email": self.support_email,
+			"website": self.website,
+			"created_at": self.created_at.isoformat() if self.created_at else None,
+			"updated_at": self.updated_at.isoformat() if self.updated_at else None,
+		}
+
+
+class OrgStatistics(Base):
+	"""Organization statistics table - counters only, no raw data."""
+	__tablename__ = "org_statistics"
+	
+	org_id = Column(String(255), primary_key=True)
+	
+	# Prompt counters by domain
+	total_prompts = Column(Integer, default=0)
+	prompts_by_domain = Column(JSONB, default={})  # {"finance": 150, "legal": 200, ...}
+	
+	# Message counters
+	total_recommendations = Column(Integer, default=0)
+	total_monitoring_messages = Column(Integer, default=0)
+	
+	# Summary counters
+	total_sessions = Column(Integer, default=0)
+	total_errors = Column(Integer, default=0)
+	
+	# Last activity timestamps
+	last_prompt_at = Column(DateTime)
+	last_recommendation_at = Column(DateTime)
+	last_monitoring_at = Column(DateTime)
+	
+	# Timestamps
+	created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+	updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+	
+	def __repr__(self):
+		return f"<OrgStatistics(org_id={self.org_id}, total_prompts={self.total_prompts}, total_recommendations={self.total_recommendations})>"
+	
+	def to_dict(self):
+		"""Convert to dictionary for API responses."""
+		return {
+			"org_id": self.org_id,
+			"total_prompts": self.total_prompts,
+			"prompts_by_domain": self.prompts_by_domain,
+			"total_recommendations": self.total_recommendations,
+			"total_monitoring_messages": self.total_monitoring_messages,
+			"total_sessions": self.total_sessions,
+			"total_errors": self.total_errors,
+			"last_prompt_at": self.last_prompt_at.isoformat() if self.last_prompt_at else None,
+			"last_recommendation_at": self.last_recommendation_at.isoformat() if self.last_recommendation_at else None,
+			"last_monitoring_at": self.last_monitoring_at.isoformat() if self.last_monitoring_at else None,
+			"created_at": self.created_at.isoformat() if self.created_at else None,
+			"updated_at": self.updated_at.isoformat() if self.updated_at else None,
+		}
+
+
+# Backward compatibility aliases (for gradual migration)
+OrchestratorInstance = Organization  # Alias for old code

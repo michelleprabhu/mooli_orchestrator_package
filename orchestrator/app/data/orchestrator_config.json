@@ -11,12 +11,12 @@
       "real_time_chat",
       "websocket"
     ],
-    "created": "2025-10-04T01:28:22.427194+00:00",
-    "last_updated": "2025-10-04T01:28:22.427211+00:00",
+    "created": "2025-10-28T18:55:03.904903+00:00",
+    "last_updated": "2025-10-28T18:55:03.905213+00:00",
     "ssl_enabled": false,
     "version": "1.0.0"
   },
-  "orchestrator_id": "orch-001",
+  "orchestrator_id": "org-002",
   "organization": {
     "location": "localhost",
     "name": "Default Orchestrator"
@@ -27,6 +27,5 @@
     "max_concurrent_sessions": 1000,
     "timeout_seconds": 1800
   },
-  "status": "inactive",
-  "independence_mode": true
+  "status": "inactive"
 }

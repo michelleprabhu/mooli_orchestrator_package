@@ -193,43 +193,41 @@ async def list_orchestrator_instances(
     List orchestrator instances - aligned with orchestrator's approach.
     Each instance represents one organization.
     """
-    total = int((await db.execute(text("SELECT COUNT(*) FROM orchestrator_instances;"))).scalar() or 0)
+    total = int((await db.execute(text("SELECT COUNT(*) FROM organizations;"))).scalar() or 0)
 
     q = text(f"""
       SELECT
+        org_id,
+        org_name,
         orchestrator_id,
-        organization_name,
         location,
         status,
-        health_status,
         last_seen,
         features,
-        session_config,
-        is_independent,
-        privacy_mode,
-        internal_url,
-        monitoring_enabled,
+        keepalive_enabled,
+        admin_email,
+        support_email,
+        website,
         created_at,
         updated_at
-      FROM orchestrator_instances
-      ORDER BY orchestrator_id
+      FROM organizations
+      ORDER BY org_id
       OFFSET :off LIMIT :lim;
     """)
     rows = (await db.execute(q, {"off": (page - 1) * page_size, "lim": page_size})).mappings().all()
 
     items = [{
-        "orchestrator_id": r["orchestrator_id"],
-        "organization_name": r["organization_name"],
+        "orchestrator_id": r["orchestrator_id"] or r["org_id"],
+        "organization_name": r["org_name"],
+        "org_id": r["org_id"],
         "location": r["location"],
-        "status": "independent" if r["is_independent"] else r["status"],  # Override status for independent orchestrators
-        "health_status": r["health_status"],
+        "status": r["status"],
         "last_seen": r["last_seen"].isoformat() if r["last_seen"] else None,
         "features": r["features"] or {},
-        "session_config": r["session_config"] or {},
-        "is_independent": r["is_independent"],
-        "privacy_mode": r["privacy_mode"],
-        "internal_url": r["internal_url"],
-        "monitoring_enabled": r["monitoring_enabled"],
+        "keepalive_enabled": r["keepalive_enabled"],
+        "admin_email": r["admin_email"],
+        "support_email": r["support_email"],
+        "website": r["website"],
         "created_at": r["created_at"].isoformat() if r["created_at"] else None,
         "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
     } for r in rows]
@@ -253,67 +251,47 @@ async def list_orchestrators(
     List orchestrators - compatibility endpoint for frontend.
     Returns the same data as orchestrator-instances but with orchestrator naming.
     """
-    total = int((await db.execute(text("SELECT COUNT(*) FROM orchestrator_instances;"))).scalar() or 0)
+    total = int((await db.execute(text("SELECT COUNT(*) FROM organizations;"))).scalar() or 0)
 
     q = text(f"""
       SELECT
+        org_id,
+        org_name,
         orchestrator_id,
-        organization_name,
         location,
         status,
-        health_status,
         last_seen,
+        connected_at,
         features,
-        session_config,
-        is_independent,
-        privacy_mode,
-        internal_url,
-        database_url,
-        redis_url,
-        container_id,
-        image_name,
-        environment_variables,
-        phoenix_endpoint,
-        monitoring_enabled,
+        keepalive_enabled,
         admin_email,
         support_email,
         website,
         created_at,
-        updated_at,
-        last_activity
-      FROM orchestrator_instances
+        updated_at
+      FROM organizations
       ORDER BY created_at DESC
       LIMIT {page_size} OFFSET {(page - 1) * page_size}
     """)
 
     rows = (await db.execute(q)).mappings().all()
     items = [{
-        "orchestrator_id": r["orchestrator_id"],
-        "organization_id": r["orchestrator_id"],  # For dashboard compatibility
-        "name": r["organization_name"],  # For dashboard compatibility
-        "organization_name": r["organization_name"],
+        "orchestrator_id": r["orchestrator_id"] or r["org_id"],
+        "organization_id": r["org_id"],  # For dashboard compatibility
+        "org_id": r["org_id"],
+        "name": r["org_name"],  # For dashboard compatibility
+        "organization_name": r["org_name"],
         "location": r["location"],
-        "status": "independent" if r["is_independent"] else r["status"],  # Override status for independent orchestrators
-        "health_status": r["health_status"],
+        "status": r["status"],
         "last_seen": r["last_seen"].isoformat() if r["last_seen"] else None,
+        "connected_at": r["connected_at"].isoformat() if r["connected_at"] else None,
         "features": r["features"] or {},
-        "session_config": r["session_config"] or {},
-        "is_independent": r["is_independent"],
-        "privacy_mode": r["privacy_mode"],
-        "internal_url": r["internal_url"],
-        "database_url": r["database_url"],
-        "redis_url": r["redis_url"],
-        "container_id": r["container_id"],
-        "image_name": r["image_name"],
-        "environment_variables": r["environment_variables"] or {},
-        "phoenix_endpoint": r["phoenix_endpoint"],
-        "monitoring_enabled": r["monitoring_enabled"],
+        "keepalive_enabled": r["keepalive_enabled"],
         "admin_email": r["admin_email"],
         "support_email": r["support_email"],
         "website": r["website"],
         "created_at": r["created_at"].isoformat() if r["created_at"] else None,
         "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
-        "last_activity": r["last_activity"].isoformat() if r["last_activity"] else None,
     } for r in rows]
 
     resp = PaginatedResponse(
@@ -333,19 +311,16 @@ async def get_live_orchestrator_instances(db: AsyncSession = Depends(get_db)):
     """
     q = text(f"""
       SELECT
+        org_id,
+        org_name,
         orchestrator_id,
-        organization_name,
         location,
         status,
-        health_status,
         last_seen,
+        connected_at,
         features,
-        session_config,
-        is_independent,
-        privacy_mode,
-        internal_url,
-        monitoring_enabled
-      FROM orchestrator_instances
+        keepalive_enabled
+      FROM organizations
       WHERE status = 'active'
         AND last_seen IS NOT NULL
         AND NOW() - last_seen <= INTERVAL '{_HEARTBEAT_TTL_SEC} seconds';
@@ -353,18 +328,15 @@ async def get_live_orchestrator_instances(db: AsyncSession = Depends(get_db)):
     rows = (await db.execute(q)).mappings().all()
 
     live_map = {
-        r["orchestrator_id"]: {
-            "organization_name": r["organization_name"],
+        r["org_id"]: {
+            "orchestrator_id": r["orchestrator_id"] or r["org_id"],
+            "organization_name": r["org_name"],
             "location": r["location"],
             "status": r["status"],
-            "health_status": r["health_status"],
             "last_seen": r["last_seen"].isoformat() if r["last_seen"] else None,
+            "connected_at": r["connected_at"].isoformat() if r["connected_at"] else None,
             "features": r["features"] or {},
-            "session_config": r["session_config"] or {},
-            "is_independent": r["is_independent"],
-            "privacy_mode": r["privacy_mode"],
-            "internal_url": r["internal_url"],
-            "monitoring_enabled": r["monitoring_enabled"],
+            "keepalive_enabled": r["keepalive_enabled"],
         }
         for r in rows
     }
@@ -382,19 +354,16 @@ async def get_live_orchestrators(db: AsyncSession = Depends(get_db)):
     """
     q = text(f"""
       SELECT
+        org_id,
+        org_name,
         orchestrator_id,
-        organization_name,
         location,
         status,
-        health_status,
         last_seen,
+        connected_at,
         features,
-        session_config,
-        is_independent,
-        privacy_mode,
-        internal_url,
-        monitoring_enabled
-      FROM orchestrator_instances
+        keepalive_enabled
+      FROM organizations
       WHERE status = 'active'
         AND last_seen IS NOT NULL
         AND NOW() - last_seen <= INTERVAL '{_HEARTBEAT_TTL_SEC} seconds';
@@ -402,21 +371,18 @@ async def get_live_orchestrators(db: AsyncSession = Depends(get_db)):
     rows = (await db.execute(q)).mappings().all()
 
     live_map = {
-        r["orchestrator_id"]: {
-            "orchestrator_id": r["orchestrator_id"],
-            "organization_id": r["orchestrator_id"],  # For frontend compatibility
-            "organization_name": r["organization_name"],
-            "name": r["organization_name"],
+        r["org_id"]: {
+            "orchestrator_id": r["orchestrator_id"] or r["org_id"],
+            "organization_id": r["org_id"],  # For frontend compatibility
+            "org_id": r["org_id"],
+            "organization_name": r["org_name"],
+            "name": r["org_name"],
             "location": r["location"],
-            "status": "independent" if r["is_independent"] else r["status"],  # Override status for independent orchestrators
-            "health_status": r["health_status"],
+            "status": r["status"],
             "last_seen": r["last_seen"].isoformat() if r["last_seen"] else None,
+            "connected_at": r["connected_at"].isoformat() if r["connected_at"] else None,
             "features": r["features"] or {},
-            "session_config": r["session_config"] or {},
-            "is_independent": r["is_independent"],
-            "privacy_mode": r["privacy_mode"],
-            "internal_url": r["internal_url"],
-            "monitoring_enabled": r["monitoring_enabled"],
+            "keepalive_enabled": r["keepalive_enabled"],
             "metadata": {
                 "features": r["features"] or {}
             }
@@ -771,24 +737,27 @@ async def delete_orchestrator_instance(orchestrator_id: str, db: AsyncSession = 
     Delete orchestrator instance - aligned with orchestrator's approach.
     """
     try:
-        # Check if instance exists
+        # Check if organization exists
         existing = await db.execute(
-            text("SELECT organization_name FROM orchestrator_instances WHERE orchestrator_id = :org_id"),
+            text("SELECT org_name FROM organizations WHERE org_id = :org_id"),
             {"org_id": orchestrator_id}
         )
-        instance = existing.fetchone()
-        if not instance:
-            raise HTTPException(404, f"Orchestrator instance {orchestrator_id} not found")
+        org = existing.fetchone()
+        if not org:
+            raise HTTPException(404, f"Organization {orchestrator_id} not found")
 
-        # Delete the instance
-        delete_query = text("DELETE FROM orchestrator_instances WHERE orchestrator_id = :org_id")
-        await db.execute(delete_query, {"org_id": orchestrator_id})
+        # Delete the organization and its statistics
+        delete_stats_query = text("DELETE FROM org_statistics WHERE org_id = :org_id")
+        await db.execute(delete_stats_query, {"org_id": orchestrator_id})
+        
+        delete_org_query = text("DELETE FROM organizations WHERE org_id = :org_id")
+        await db.execute(delete_org_query, {"org_id": orchestrator_id})
         await db.commit()
         
         return APIResponse(
             success=True,
-            data={"orchestrator_id": orchestrator_id, "organization_name": instance[0]},
-            message=f"Orchestrator instance {orchestrator_id} deleted successfully"
+            data={"orchestrator_id": orchestrator_id, "organization_name": org[0]},
+            message=f"Organization {orchestrator_id} deleted successfully"
         )
         
     except HTTPException:

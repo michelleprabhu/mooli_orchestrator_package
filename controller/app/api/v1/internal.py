@@ -20,64 +20,7 @@ from collections import deque
 import logging
 import json
 
-# Environment writing functions
-async def write_independence_to_env(orchestrator_id: str, is_independent: bool):
-    """Write independence setting to environment files."""
-    try:
-        # Write to controller .env file (in Docker container)
-        controller_env_path = "/app/controller/app/.env"
-        await update_env_file(controller_env_path, f"ORCHESTRATOR_{orchestrator_id.upper()}_INDEPENDENT", str(is_independent).lower())
-        
-        # Write to orchestrator config JSON (in Docker container)  
-        config_path = f"/app/controller/app/db/orchestrator_independence.json"
-        await update_config_json(config_path, orchestrator_id, {"is_independent": is_independent})
-        
-        logging.info(f"Independence setting written to environment files for {orchestrator_id}: {is_independent}")
-    except Exception as e:
-        logging.debug(f"Failed to write independence to environment files (non-critical): {e}")
-
-async def update_env_file(file_path: str, key: str, value: str):
-    """Update or add a key-value pair in an .env file."""
-    try:
-        # Read existing content
-        env_content = {}
-        if os.path.exists(file_path):
-            with open(file_path, 'r') as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith('#') and '=' in line:
-                        k, v = line.split('=', 1)
-                        env_content[k.strip()] = v.strip()
-        
-        # Update the key
-        env_content[key] = value
-        
-        # Write back to file
-        with open(file_path, 'w') as f:
-            for k, v in env_content.items():
-                f.write(f"{k}={v}\n")
-                
-    except Exception as e:
-        logging.error(f"Failed to update env file {file_path}: {e}")
-
-async def update_config_json(file_path: str, key: str, value: Any):
-    """Update or add a key-value pair in a JSON config file."""
-    try:
-        # Read existing content
-        config_data = {}
-        if os.path.exists(file_path):
-            with open(file_path, 'r') as f:
-                config_data = json.load(f)
-        
-        # Update the key
-        config_data[key] = value
-        
-        # Write back to file
-        with open(file_path, 'w') as f:
-            json.dump(config_data, f, indent=2)
-            
-    except Exception as e:
-        logging.error(f"Failed to update config JSON {file_path}: {e}")
+# Independence mode removed - now orchestrator-side concern
 from fastapi import Query
 
 from ...db.database import get_db
@@ -284,93 +227,51 @@ async def register_orchestrator(registration: Dict[str, Any], db: AsyncSession =
     if not org_id:
         raise HTTPException(400, "organization_id is required")
 
-    # Create/update orchestrator instance (aligned with orchestrator's config structure)
+    # Create/update organization (unified schema)
     try:
-        res = await db.execute(select(OrchestratorInstance).where(OrchestratorInstance.orchestrator_id == org_id))
-        instance = res.scalars().first()
-        
-        if instance:
-            # Update existing instance
-            instance.organization_name = name
-            instance.location = registration.get("location", "unknown")
-            instance.status = "active"
-            instance.last_seen = datetime.utcnow()
-            instance.health_status = "healthy"
-            instance.internal_url = registration.get("internal_url")
-            instance.database_url = registration.get("database_url")
-            instance.redis_url = registration.get("redis_url")
-            instance.container_id = registration.get("container_id")
-            instance.image_name = registration.get("image_name")
-            instance.environment_variables = registration.get("environment_variables", {})
-            
-            # Update features from registration
-            features = instance.features or {}
-            if "monitoring" in registration:
-                monitoring = registration["monitoring"]
-                if monitoring.get("enabled"):
-                    instance.monitoring_enabled = True
-                    instance.phoenix_endpoint = monitoring.get("endpoints", {}).get("metrics")
-            
-            instance.features = features
-        else:
-            # Create new instance
-            features = {}
-            if "monitoring" in registration:
-                monitoring = registration["monitoring"]
-                if monitoring.get("enabled"):
-                    features["monitoring"] = {
-                        "enabled": True,
-                        "phoenix_endpoint": monitoring.get("endpoints", {}).get("metrics")
-                    }
-            
-            instance = OrchestratorInstance(
-                orchestrator_id=org_id,  # Use org_id as orchestrator_id (matches orchestrator's ORGANIZATION_ID)
-                organization_name=name,
-                location=registration.get("location", "unknown"),
-                status="inactive",  # Start as inactive until WebSocket connection established
-                last_seen=None,  # No heartbeat yet
-                health_status="unknown",  # Unknown until connected
-                internal_url=registration.get("internal_url"),
-                database_url=registration.get("database_url"),
-                redis_url=registration.get("redis_url"),
-                container_id=registration.get("container_id"),
-                image_name=registration.get("image_name"),
-                environment_variables=registration.get("environment_variables", {}),
-                features=features,
-                monitoring_enabled=registration.get("monitoring", {}).get("enabled", True),
-                phoenix_endpoint=registration.get("monitoring", {}).get("endpoints", {}).get("metrics")
-            )
-            db.add(instance)
-
-        # Also create/update in organizations table for frontend Organizations page
         from ...models.organization import Organization
         from sqlalchemy.dialects.postgresql import insert as pg_insert
         
-        settings = {
-            "location": registration.get("location", "unknown"),
-            "features": features,
-            "metadata": registration.get("environment_variables", {})
-        }
+        res = await db.execute(select(Organization).where(Organization.org_id == org_id))
+        org = res.scalars().first()
         
-        org_stmt = pg_insert(Organization).values(
-            organization_id=org_id,
-            name=name,
-            location=registration.get("location", "unknown"),
-            is_active=False,  # Start as inactive until actual orchestrator connects
-            settings=settings,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
-        ).on_conflict_do_update(
-            index_elements=['organization_id'],
-            set_=dict(
-                name=name,
+        features = registration.get("features", {})
+        
+        if org:
+            # Update existing organization
+            org.org_name = name
+            org.location = registration.get("location", "unknown")
+            org.features = features
+            org.admin_email = registration.get("admin_email")
+            org.support_email = registration.get("support_email")
+            org.website = registration.get("website")
+            org.updated_at = datetime.utcnow()
+        else:
+            # Create new organization
+            org = Organization(
+                org_id=org_id,
+                org_name=name,
+                orchestrator_id=org_id,
+                status="inactive",  # Will become active on WebSocket connection
+                keepalive_enabled=True,
                 location=registration.get("location", "unknown"),
-                settings=settings,
+                features=features,
+                admin_email=registration.get("admin_email"),
+                support_email=registration.get("support_email"),
+                website=registration.get("website"),
+                created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
             )
-        )
-        await db.execute(org_stmt)
-
+            db.add(org)
+        
+        await db.commit()
+        
+        # Initialize statistics
+        await db.execute(text("""
+            INSERT INTO org_statistics (org_id)
+            VALUES (:org_id)
+            ON CONFLICT (org_id) DO NOTHING
+        """), {"org_id": org_id})
         await db.commit()
         
         # Update config for backward compatibility (optional)
@@ -383,7 +284,7 @@ async def register_orchestrator(registration: Dict[str, Any], db: AsyncSession =
                 "metadata": registration.get("environment_variables") or {},
                 "features": features,
                 "last_seen": datetime.utcnow().isoformat(),
-                "status": "active",
+                "status": "inactive",
             }
             controller_config.update_config(cfg)
         except Exception as e:
@@ -395,14 +296,10 @@ async def register_orchestrator(registration: Dict[str, Any], db: AsyncSession =
         raise HTTPException(500, f"Registration failed: {str(e)}")
 
     return _ok(
-        "Orchestrator instance registered (inactive until connection)",
+        "Organization registered (inactive until WebSocket connection)",
         orchestrator_id=org_id,
         organization_name=name,
-        status=instance.status,
-        independence_support={
-            "is_independent": instance.is_independent,
-            "privacy_mode": instance.privacy_mode
-        },
+        status=org.status,
         controller_endpoints={
             "heartbeat": "/api/v1/internal/orchestrators/heartbeat",
             "deregister": f"/api/v1/internal/orchestrators/{org_id}/deregister",
@@ -425,43 +322,39 @@ async def orchestrator_heartbeat(heartbeat: Dict[str, Any], db: AsyncSession = D
 
     now = datetime.utcnow()
 
-    # Update orchestrator instance
+    # Update organization (unified schema)
     try:
-        res = await db.execute(select(OrchestratorInstance).where(OrchestratorInstance.orchestrator_id == org_id))
-        instance = res.scalars().first()
+        from ...models.organization import Organization
+        res = await db.execute(select(Organization).where(Organization.org_id == org_id))
+        org = res.scalars().first()
         
-        log.info("DEBUG: Looking for orchestrator %s, found instance: %s", org_id, instance is not None)
+        log.info("DEBUG: Looking for orchestrator %s, found org: %s", org_id, org is not None)
         
-        if instance:
-            # Check if orchestrator is marked as independent
-            log.info("DEBUG: Checking independence for %s: is_independent=%s", org_id, instance.is_independent)
-            if instance.is_independent:
-                log.info("Ignoring heartbeat from independent orchestrator %s", org_id)
-                # Return success but don't update anything - orchestrator stays independent
-                return _ok("Heartbeat ignored - orchestrator is independent", orchestrator_id=org_id, status="independent")
-            
-            instance.status = "active"
-            instance.health_status = heartbeat.get("health_status", "healthy")
-            instance.last_seen = now
-            instance.last_activity = now
+        if org:
+            # Unconditional processing - no independence checks
+            org.status = "active"
+            org.last_seen = now
+            org.updated_at = now
             
             # Update features if provided in heartbeat
             if "features" in heartbeat:
-                current_features = instance.features or {}
+                current_features = org.features or {}
                 current_features.update(heartbeat["features"])
-                instance.features = current_features
+                org.features = current_features
         else:
-            # Create minimal instance if missing (shouldn't happen with proper registration)
-            instance = OrchestratorInstance(
+            # Create minimal org if missing (shouldn't happen with proper registration)
+            org = Organization(
+                org_id=org_id,
+                org_name=heartbeat.get("name") or org_id,
                 orchestrator_id=org_id,
-                organization_name=heartbeat.get("name") or org_id,
                 status="active",
-                health_status=heartbeat.get("health_status", "healthy"),
                 last_seen=now,
-                last_activity=now,
-                features=heartbeat.get("features", {})
+                keepalive_enabled=True,
+                features=heartbeat.get("features", {}),
+                created_at=now,
+                updated_at=now
             )
-            db.add(instance)
+            db.add(org)
 
         await db.commit()
         
@@ -486,20 +379,12 @@ async def orchestrator_heartbeat(heartbeat: Dict[str, Any], db: AsyncSession = D
 @router.delete("/orchestrators/{orchestrator_id}/deregister")
 async def deregister_orchestrator(orchestrator_id: str, db: AsyncSession = Depends(get_db)):
     try:
-        # Update database - mark as inactive
-        await db.execute(
-            text("""
-                UPDATE orchestrator_instances 
-                SET status = 'inactive', updated_at = NOW()
-                WHERE orchestrator_id = :orch_id
-            """),
-            {"orch_id": orchestrator_id}
-        )
+        # Update database - mark as inactive (unified schema)
         await db.execute(
             text("""
                 UPDATE organizations 
-                SET is_active = false, updated_at = NOW()
-                WHERE organization_id = :orch_id
+                SET status = 'inactive', updated_at = NOW()
+                WHERE org_id = :orch_id
             """),
             {"orch_id": orchestrator_id}
         )
@@ -518,84 +403,7 @@ async def deregister_orchestrator(orchestrator_id: str, db: AsyncSession = Depen
     return _ok("Orchestrator deregistered", orchestrator_id=orchestrator_id, status="inactive")
 
 
-# ---------- Independence and Privacy Support ----------
-@router.put("/orchestrators/{orchestrator_id}/independence")
-async def set_orchestrator_independence(
-    orchestrator_id: str,
-    independence_data: Dict[str, Any] = Body(default={}),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Set orchestrator independence and privacy mode.
-    This allows orchestrators to opt out of controller management.
-    """
-    is_independent = independence_data.get("is_independent", False)
-    privacy_mode = independence_data.get("privacy_mode", False)
-    
-    try:
-        res = await db.execute(select(OrchestratorInstance).where(OrchestratorInstance.orchestrator_id == orchestrator_id))
-        instance = res.scalars().first()
-        
-        if not instance:
-            raise HTTPException(404, f"Orchestrator instance {orchestrator_id} not found")
-        
-        instance.is_independent = is_independent
-        instance.privacy_mode = privacy_mode
-        instance.status = "independent" if is_independent else "inactive"
-        instance.updated_at = datetime.utcnow()
-        
-        # Also update the Organization table
-        from ...models.organization import Organization
-        org_res = await db.execute(select(Organization).where(Organization.organization_id == orchestrator_id))
-        org = org_res.scalars().first()
-        if org:
-            org.is_independent = is_independent
-            org.updated_at = datetime.utcnow()
-        
-        await db.commit()
-        
-        # Write to environment files
-        await write_independence_to_env(orchestrator_id, is_independent)
-        
-        return _ok(
-            "Independence settings updated",
-            orchestrator_id=orchestrator_id,
-            is_independent=is_independent,
-            privacy_mode=privacy_mode,
-            status_message=f"Orchestrator {'is now independent' if is_independent else 'is now managed by controller'}"
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        log.error("Failed to update independence settings: %s", e)
-        await db.rollback()
-        raise HTTPException(500, f"Failed to update independence settings: {str(e)}")
-
-@router.get("/orchestrators/{orchestrator_id}/independence")
-async def get_orchestrator_independence(orchestrator_id: str, db: AsyncSession = Depends(get_db)):
-    """Get orchestrator independence and privacy settings."""
-    try:
-        res = await db.execute(select(OrchestratorInstance).where(OrchestratorInstance.orchestrator_id == orchestrator_id))
-        instance = res.scalars().first()
-        
-        if not instance:
-            raise HTTPException(404, f"Orchestrator instance {orchestrator_id} not found")
-        
-        return _ok(
-            "Independence settings retrieved",
-            orchestrator_id=orchestrator_id,
-            is_independent=instance.is_independent,
-            privacy_mode=instance.privacy_mode,
-            status=instance.status,
-            last_seen=instance.last_seen.isoformat() if instance.last_seen else None
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        log.error("Failed to get independence settings: %s", e)
-        raise HTTPException(500, f"Failed to get independence settings: {str(e)}")
+# Independence endpoints removed - orchestrator-side concern now
 
 # Orchestrator Message Endpoints
 @router.post("/orchestrators/{orchestrator_id}/messages")

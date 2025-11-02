@@ -350,7 +350,7 @@ async def websocket_handler(websocket: WebSocket):
         except Exception as e:
             logger.warning("[C-OCS] register_orchestrator error: %s", e)
         
-        # Register in database (both orchestrator_instances AND organizations tables)
+        # Register in database (unified organizations table)
         try:
             from sqlalchemy import text
             org_name = metadata.get("name") or f"Organization {orch_id}"
@@ -358,60 +358,45 @@ async def websocket_handler(websocket: WebSocket):
             features = metadata.get("features", {})
             
             async with db_manager.get_session() as db:
-                # 1. Insert/update orchestrator_instances
+                # Insert/update unified organizations table
                 from sqlalchemy.dialects.postgresql import insert
-                stmt = insert(OrchestratorInstance).values(
+                stmt = insert(Organization).values(
+                    org_id=orch_id,
+                    org_name=org_name,
                     orchestrator_id=orch_id,
-                    organization_name=org_name,
-                    location=location,
                     status='active',
-                    health_status='healthy',
                     last_seen=datetime.utcnow(),
+                    connected_at=datetime.utcnow(),
+                    keepalive_enabled=True,
+                    location=location,
                     features=features,
                     created_at=datetime.utcnow(),
                     updated_at=datetime.utcnow()
                 ).on_conflict_do_update(
-                    index_elements=['orchestrator_id'],
+                    index_elements=['org_id'],
                     set_=dict(
-                        organization_name=org_name,
-                        location=location,
+                        org_name=org_name,
+                        orchestrator_id=orch_id,
                         status='active',
-                        health_status='healthy',
                         last_seen=datetime.utcnow(),
+                        connected_at=datetime.utcnow(),
+                        location=location,
                         features=features,
                         updated_at=datetime.utcnow()
                     )
                 )
                 await db.execute(stmt)
                 
-                # 2. Insert/update organizations table (for frontend Organizations page)
-                settings = {
-                    "location": location,
-                    "features": features,
-                    "metadata": metadata
-                }
-                stmt2 = insert(Organization).values(
-                    organization_id=orch_id,
-                    name=org_name,
-                    location=location,
-                    is_active=True,
-                    settings=settings,
-                    created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow()
-                ).on_conflict_do_update(
-                    index_elements=['organization_id'],
-                    set_=dict(
-                        name=org_name,
-                        location=location,
-                        is_active=True,
-                        settings=settings,
-                        updated_at=datetime.utcnow()
-                    )
-                )
-                await db.execute(stmt2)
+                # Initialize statistics if not exists
+                stmt2 = text("""
+                    INSERT INTO org_statistics (org_id)
+                    VALUES (:org_id)
+                    ON CONFLICT (org_id) DO NOTHING
+                """)
+                await db.execute(stmt2, {"org_id": orch_id})
                 
                 await db.commit()
-                logger.info("[C-OCS] DB: Registered %s in both tables", orch_id)
+                logger.info("[C-OCS] DB: Registered %s in unified schema", orch_id)
         except Exception as e:
             logger.warning("[C-OCS] DB registration failed: %s", e)
             import traceback
@@ -482,57 +467,33 @@ async def websocket_handler(websocket: WebSocket):
                 
                 mtype = msg.get("type")
                 
-                # Update presence on keepalives
+                # Update presence on keepalives - UNCONDITIONAL PROCESSING
                 if mtype == "i_am_alive":
-                    # Check if orchestrator is marked as independent
-                    is_independent = False
-                    try:
-                        from sqlalchemy import text
-                        async with db_manager.get_session() as db:
-                            # Check independence status
-                            independence_query = text("""
-                                SELECT is_independent FROM orchestrator_instances 
-                                WHERE orchestrator_id = :orch_id
-                            """)
-                            result = await db.execute(independence_query, {"orch_id": orch_id})
-                            row = result.fetchone()
-                            
-                            if row and row[0]:  # is_independent = True
-                                is_independent = True
-                                logger.info("[C-OCS] Ignoring heartbeat from independent orchestrator %s", orch_id)
-                                # Just ignore the heartbeat - don't update anything
-                                continue
-                    except Exception as e:
-                        logger.debug("[C-OCS] Independence check failed: %s", e)
+                    logger.debug("[C-OCS] Keepalive from %s", orch_id)
                     
-                    # If we get here, the orchestrator is NOT independent - process the heartbeat
-                    if not is_independent:
-                        logger.info("[C-OCS] Processing heartbeat from orchestrator %s", orch_id)
-                    
+                    # Update in-memory state
                     mark_keepalive(orch_id)
                     live_internal = list_orchestrators(public=False)
                     if orch_id in live_internal:
                         live_internal[orch_id]["last_seen"] = now_iso()
                     controller_buffers.add_activity("keepalive", {"orch_id": orch_id})
                     
-                    # Update database heartbeat
+                    # Update database - unconditionally (new unified schema)
                     try:
                         from sqlalchemy import text
                         async with db_manager.get_session() as db:
                             query = text("""
-                                UPDATE orchestrator_instances 
+                                UPDATE organizations 
                                 SET last_seen = NOW(), 
                                     status = 'active',
-                                    health_status = 'healthy',
                                     updated_at = NOW()
-                                WHERE orchestrator_id = :orch_id
+                                WHERE org_id = :orch_id
                             """)
                             await db.execute(query, {"orch_id": orch_id})
                             await db.commit()
                     except Exception as e:
                         logger.debug("[C-OCS] DB heartbeat update failed: %s", e)
                     
-                    logger.debug("[C-OCS] keepalive from %s", orch_id)
                     continue
                 
                 # Handle other message types
@@ -556,6 +517,73 @@ async def websocket_handler(websocket: WebSocket):
                             logger.info("[C-OCS] Provisioning sent to %s (on request)", orch_id)
                     except Exception as e:
                         logger.warning("[C-OCS] provisioning_request failed: %s", e)
+                
+                elif mtype == "recommendation":
+                    # Increment recommendation counter
+                    try:
+                        from sqlalchemy import text
+                        async with db_manager.get_session() as db:
+                            query = text("""
+                                UPDATE org_statistics 
+                                SET total_recommendations = total_recommendations + 1,
+                                    last_recommendation_at = NOW(),
+                                    updated_at = NOW()
+                                WHERE org_id = :org_id
+                            """)
+                            await db.execute(query, {"org_id": orch_id})
+                            await db.commit()
+                        logger.info("[C-OCS] Recommendation from %s (counter updated)", orch_id)
+                    except Exception as e:
+                        logger.warning("[C-OCS] Failed to update recommendation counter: %s", e)
+                
+                elif mtype == "monitoring":
+                    # Increment monitoring counter
+                    try:
+                        from sqlalchemy import text
+                        async with db_manager.get_session() as db:
+                            query = text("""
+                                UPDATE org_statistics 
+                                SET total_monitoring_messages = total_monitoring_messages + 1,
+                                    last_monitoring_at = NOW(),
+                                    updated_at = NOW()
+                                WHERE org_id = :org_id
+                            """)
+                            await db.execute(query, {"org_id": orch_id})
+                            await db.commit()
+                        logger.debug("[C-OCS] Monitoring from %s (counter updated)", orch_id)
+                    except Exception as e:
+                        logger.warning("[C-OCS] Failed to update monitoring counter: %s", e)
+                
+                elif mtype == "prompt_stats":
+                    # Update prompt counters by domain
+                    try:
+                        payload = msg.get("data", {})
+                        domain = payload.get("domain", "general")
+                        count = payload.get("count", 1)
+                        
+                        from sqlalchemy import text
+                        async with db_manager.get_session() as db:
+                            query = text("""
+                                UPDATE org_statistics 
+                                SET total_prompts = total_prompts + :count,
+                                    prompts_by_domain = jsonb_set(
+                                        COALESCE(prompts_by_domain, '{}'::jsonb),
+                                        ARRAY[:domain]::text[],
+                                        (COALESCE((prompts_by_domain->>:domain)::int, 0) + :count)::text::jsonb
+                                    ),
+                                    last_prompt_at = NOW(),
+                                    updated_at = NOW()
+                                WHERE org_id = :org_id
+                            """)
+                            await db.execute(query, {
+                                "org_id": orch_id,
+                                "domain": domain,
+                                "count": count
+                            })
+                            await db.commit()
+                        logger.debug("[C-OCS] Prompt stats from %s: %s=%d", orch_id, domain, count)
+                    except Exception as e:
+                        logger.warning("[C-OCS] Failed to update prompt stats: %s", e)
                 
                 elif mtype == "o_config_snapshot":
                     try:
@@ -592,15 +620,15 @@ async def websocket_handler(websocket: WebSocket):
             _last_sent_features.pop(orch_id, None)
             _provisioning_guard.pop(orch_id, None)
             
-            # Mark as inactive in database
+            # Mark as inactive in database (unified schema)
             try:
                 from sqlalchemy import text
                 async with db_manager.get_session() as db:
                     query = text("""
-                        UPDATE orchestrator_instances 
+                        UPDATE organizations 
                         SET status = 'inactive', 
                             updated_at = NOW()
-                        WHERE orchestrator_id = :orch_id
+                        WHERE org_id = :orch_id
                     """)
                     await db.execute(query, {"orch_id": orch_id})
                     await db.commit()

@@ -1,32 +1,18 @@
 {
-  "features": {
-    "cache": {
-      "enabled": false
-    }
-  },
+  "features": {},
   "last_seen": null,
   "metadata": {
     "capabilities": [],
-    "created": "2025-10-04T01:28:22.415643+00:00",
-    "features": {
-      "cache": {
-        "enabled": false
-      }
-    },
-    "hostname": "MacBookPro.lan",
-    "ip": "192.168.1.99",
-    "last_updated": "2025-10-04T01:35:55.587041+00:00",
-    "location": "localhost",
-    "name": "Default Orchestrator",
+    "created": "2025-10-28T18:56:33.704595+00:00",
+    "last_updated": "2025-10-28T18:56:33.704848+00:00",
     "ssl_enabled": false,
     "version": "1.0.0"
   },
-  "orchestrator_id": "orch-001",
+  "orchestrator_id": "org-002",
   "organization": {
     "location": "localhost",
     "name": "Default Orchestrator"
   },
   "service_type": "orchestrator",
-  "session": {},
   "status": "inactive"
 }

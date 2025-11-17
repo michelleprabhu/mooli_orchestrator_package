@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AppProvider } from "./contexts/AppContext";
 import { SignUp } from "./pages/SignUp";
 import { Login } from "./pages/Login";
-import { VerifyEmail } from "./pages/VerifyEmail";
 import { ProfileSetup } from "./pages/ProfileSetup";
 import { LLMSetup } from "./pages/LLMSetup";
 import { Dashboard } from "./pages/Dashboard";
@@ -37,7 +36,6 @@ const App = () => (
             <Route path="/" element={<SignUp />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/profile-setup" element={<ProfileSetup />} />
             <Route path="/llm-setup" element={<LLMSetup />} />
             <Route path="/dashboard" element={<Dashboard />} />

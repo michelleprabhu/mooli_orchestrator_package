@@ -76,6 +76,9 @@ async def lifespan(app: FastAPI):
     from .core.startup_validation import validate_logging_setup, log_startup_summary
     validation_results = validate_logging_setup()
     
+    # Get environment
+    environment = os.getenv("ENVIRONMENT", "production")
+    
     # Initialize database
     try:
         logger.info("Initializing database connection...")
@@ -89,10 +92,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("❌ Orchestrator database initialization failed")
         log_exception(logger, e, {"component": "database_init"})
-        raise  # Fail startup if database init fails
+        if environment.lower() != "development":
+            raise  # Fail startup in production, but continue in development
+        else:
+            logger.warning("🔧 DEVELOPMENT MODE: Continuing without database for MSAL testing")
     
     # Register with controller
-    environment = os.getenv("ENVIRONMENT", "production")
     try:
         if environment.lower() == "development":
             logger.info("🔧 DEVELOPMENT MODE: Attempting controller registration (optional)...")

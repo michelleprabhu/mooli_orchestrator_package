@@ -2,7 +2,7 @@
 Authentication API Routes
 =========================
 
-Provides login/logout endpoints with development bypass support.
+Provides login/logout endpoints with Microsoft Entra ID (MSAL) authentication.
 """
 
 import os
@@ -19,7 +19,14 @@ from ..services.auth_service import (
     validate_jwt_token,
     list_dev_users
 )
+from ..msal_auth.entra_auth import (
+    validate_entra_token,
+    get_authorization_url,
+    exchange_code_for_token,
+    FRONTEND_URL
+)
 from ..core.logging_config import get_logger, audit_logger, log_exception
+from fastapi.responses import RedirectResponse
 
 logger = get_logger(__name__)
 
@@ -150,8 +157,8 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
     """
     Get current authenticated user information.
     
-    Development mode: Accepts any token or no token
-    Production mode: Validates JWT token
+    Validates Microsoft Entra ID (MSAL) tokens.
+    Falls back to development mode if no token provided in development environment.
     """
     is_development = os.getenv("ENVIRONMENT", "development") == "development"
     
@@ -164,9 +171,11 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
                 "user_id": default_user["user_id"],
                 "username": default_user["username"],
                 "full_name": default_user["full_name"],
+                "email": default_user.get("username") + "@dev.local",
                 "department": default_user.get("department"),
                 "is_admin": default_user.get("is_admin", False),
                 "authenticated": True,
+                "auth_type": "development",
                 "development_mode": True
             }
     
@@ -176,7 +185,33 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
             detail="Authentication required"
         )
     
-    # Validate token
+    # Try to validate as MSAL token first
+    try:
+        msal_payload = await validate_entra_token(credentials.credentials)
+        if msal_payload:
+            # Extract user information from MSAL token
+            oid = msal_payload.get("oid") or msal_payload.get("sub")
+            email = msal_payload.get("email") or msal_payload.get("preferred_username")
+            name = msal_payload.get("name") or f"{msal_payload.get('given_name', '')} {msal_payload.get('family_name', '')}".strip()
+            
+            logger.info(f"✅ MSAL authentication successful | user={email} | oid={oid}")
+            
+            return {
+                "user_id": oid,
+                "username": email,
+                "full_name": name,
+                "email": email,
+                "oid": oid,
+                "roles": msal_payload.get("roles", []),
+                "is_admin": "Admin" in msal_payload.get("roles", []),
+                "authenticated": True,
+                "auth_type": "msal",
+                "development_mode": is_development
+            }
+    except Exception as e:
+        logger.warning(f"MSAL token validation failed: {e}")
+    
+    # Fallback to legacy JWT validation if MSAL fails
     token_data = validate_jwt_token(credentials.credentials)
     if not token_data:
         raise HTTPException(
@@ -187,9 +222,12 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
     return {
         "user_id": token_data["user_id"],
         "username": token_data["username"],
+        "full_name": token_data.get("full_name", token_data["username"]),
+        "email": token_data.get("email", token_data["username"]),
         "org_id": token_data.get("org_id"),
         "is_admin": token_data.get("is_admin", False),
         "authenticated": True,
+        "auth_type": "jwt_legacy",
         "development_mode": is_development
     }
 
@@ -277,3 +315,116 @@ async def get_auth_status():
         "development_bypass": is_development,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
+
+
+# ========== Microsoft Entra ID OAuth Endpoints ==========
+
+@router.get("/entra/login")
+async def entra_login():
+    """
+    Initiate Microsoft Entra ID OAuth flow.
+    Redirects user to Microsoft sign-in page.
+    """
+    try:
+        # Generate random state for CSRF protection
+        import secrets
+        state = secrets.token_urlsafe(32)
+        
+        # Get Microsoft authorization URL
+        auth_url = get_authorization_url(state=state)
+        
+        logger.info(f"🔐 Initiating Microsoft OAuth flow | redirect={auth_url[:80]}...")
+        
+        # Redirect user to Microsoft sign-in
+        return RedirectResponse(url=auth_url)
+        
+    except Exception as e:
+        logger.error(f"Error initiating OAuth flow: {e}")
+        log_exception(logger, e, {"endpoint": "/entra/login"})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to initiate authentication"
+        )
+
+
+@router.get("/entra/callback")
+async def entra_callback(code: Optional[str] = None, error: Optional[str] = None, state: Optional[str] = None):
+    """
+    OAuth callback endpoint.
+    Microsoft redirects here after user signs in.
+    """
+    try:
+        # Handle error from Microsoft
+        if error:
+            logger.error(f"❌ Microsoft OAuth error: {error}")
+            return RedirectResponse(url=f"{FRONTEND_URL}/login?error={error}")
+        
+        # Validate we have the authorization code
+        if not code:
+            logger.error("❌ No authorization code received")
+            return RedirectResponse(url=f"{FRONTEND_URL}/login?error=no_code")
+        
+        logger.info(f"🔐 Received OAuth callback | code={code[:20]}... | state={state}")
+        
+        # Exchange code for token
+        token_response = await exchange_code_for_token(code)
+        if not token_response:
+            logger.error("❌ Failed to exchange code for token")
+            return RedirectResponse(url=f"{FRONTEND_URL}/login?error=token_exchange_failed")
+        
+        # Extract tokens
+        access_token = token_response.get("access_token")
+        id_token = token_response.get("id_token")
+        
+        # Use ID token for authentication (not access token)
+        if not id_token:
+            logger.error("❌ No ID token in response")
+            return RedirectResponse(url=f"{FRONTEND_URL}/login?error=no_token")
+        
+        logger.info(f"🔐 Validating ID token (not access token) for authentication")
+        
+        # Validate the ID token (this is for authentication, not API access)
+        token_payload = await validate_entra_token(id_token)
+        if not token_payload:
+            logger.error("❌ ID token validation failed")
+            return RedirectResponse(url=f"{FRONTEND_URL}/login?error=invalid_token")
+        
+        # Extract user info
+        user_id = token_payload.get("oid") or token_payload.get("sub")
+        email = token_payload.get("email") or token_payload.get("preferred_username")
+        name = token_payload.get("name", "")
+        
+        logger.info(f"✅ Microsoft authentication successful | user={email} | oid={user_id}")
+        
+        # Create JWT token for our system
+        user_data = {
+            "user_id": user_id,
+            "username": email,
+            "full_name": name,
+            "email": email,
+            "is_admin": False,  # TODO: Check roles from token
+            "org_id": "org_001"
+        }
+        jwt_token = create_jwt_token(user_data)
+        
+        # Create response with redirect to dashboard
+        response = RedirectResponse(url=f"{FRONTEND_URL}/dashboard")
+        
+        # Set secure HTTP-only cookie with the JWT token
+        response.set_cookie(
+            key="auth_token",
+            value=jwt_token,
+            httponly=True,
+            secure=False,  # Set to True in production with HTTPS
+            samesite="lax",
+            max_age=86400,  # 24 hours
+        )
+        
+        logger.info(f"✅ User authenticated and redirected to dashboard | user={email}")
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"❌ OAuth callback error: {e}")
+        log_exception(logger, e, {"endpoint": "/entra/callback"})
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?error=callback_failed")

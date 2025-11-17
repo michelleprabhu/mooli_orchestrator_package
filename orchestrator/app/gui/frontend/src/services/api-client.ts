@@ -61,8 +61,8 @@ class MoolAIApiClient {
     const timeoutId = setTimeout(() => {
       this.controller?.abort();
     }, this.config.timeout);
-
-    const defaultHeaders = {
+    
+    const defaultHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-Organization-ID': this.config.organizationId,
     };
@@ -74,6 +74,7 @@ class MoolAIApiClient {
         ...options.headers,
       },
       signal: this.controller.signal,
+      credentials: 'include', // Include cookies in requests
     };
 
     this.log('Making request:', { url, options: requestOptions });
